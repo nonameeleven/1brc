@@ -7,8 +7,6 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Diagnosers;
-using BenchmarkDotNet.Jobs;
 
 namespace _1RBC;
 
@@ -90,7 +88,7 @@ public class v1
             thread.Join();
         }
 
-        threadStats.Aggregate(
+        var aggregatedStats = threadStats.Aggregate(
                 new Dictionary<string, CityStat>(),
                 (agg1, agg2) =>
                 {
@@ -108,13 +106,22 @@ public class v1
                         );
 
                     return merged;
-                })
-            .ToList()
-            .ForEach((kv) =>
+                });
+        
+        var result = aggregatedStats.Aggregate(
+            new StringBuilder(), 
+            (agg, curr) =>
             {
-                Console.WriteLine(
-                    $"{kv.Key}: Min {kv.Value.Min} Max {kv.Value.Max} Mean {kv.Value.Sum / kv.Value.Count}");
+                var mean = Math.Round((decimal)curr.Value.Sum / curr.Value.Count, 1); 
+                var local_result = $"{curr.Key}={curr.Value.Min}/{mean}/{curr.Value.Max}, ";
+                agg.Append(local_result);
+
+                return agg;
             });
+
+        Console.Write("{");
+        Console.Write(result.ToString(0, result.Length-1));
+        Console.Write("}");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -148,6 +155,7 @@ public class v1
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private Span<byte> GetLine(Span<byte> src, int offset)
     {
         var min_offset = offset + 5;
@@ -156,7 +164,7 @@ public class v1
         if (i >= src.Length)
             return Span<byte>.Empty;
         
-        while (src[i++] != '\n');
+        while (src[i++] != (byte)'\n');
 
         var result = src.Slice(offset, i - offset);
         return result;
@@ -224,8 +232,7 @@ public unsafe class htable
             table[idx].Name[j] = item[j];
         }
     }
-    
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+
     public void Update(int index, float temp)
     {
         if (temp < this.table[index].Min)
@@ -238,6 +245,7 @@ public unsafe class htable
         this.table[index].Count++;
     }
     
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int tpop_hash(Span<byte> str)
     {
         uint hash = 0;
@@ -245,7 +253,6 @@ public unsafe class htable
         for (var i = 0; i < str.Length; i++)
         {
             hash = 31 * hash + str[i];
-            //hash = (hash * 37) + str[i];
         }
 
         return (int)(hash % size);
